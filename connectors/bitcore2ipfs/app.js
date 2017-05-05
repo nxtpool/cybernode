@@ -29,7 +29,7 @@ ipfs.getHeight(function (data) {
             },
             function () {
                 formTxHashQueue(start);
-            }, processTxHashQueue, insertData
+            }, insertData
         ],
         function () {
         });
@@ -37,20 +37,13 @@ ipfs.getHeight(function (data) {
 
 
 var blockHashes = {};
-var txHashes = [];
-
-var blocks = {};
 var completeBlocks = [];
 
 const BLOCK_HASH_QUEUE_LIMIT = 10;
-const TX_HASH_QUEUE_LIMIT = 10000;
 const BLOCK_HASH_QUEUE_DELAY = 100;
 const TX_HASH_QUEUE_DELAY = 100;
 const WAIT_NEXT_BLOCK_HASH_DELAY = 10;
-const WAIT_NEXT_TX_HASH_DELAY = 10;
 const BLOCK_IN_PARALEL = 7;
-const TX_IN_PARALEL = 7;
-const TX_PROCESSING_QUEUE_DELAY = 100;
 const WAIT_BLOCK_DOWNLOAD_DELAY = 1000;
 const STORE_QUEUE_THREAD_DECREASE_STEP = 10;
 
@@ -85,7 +78,7 @@ function formTxHashQueue(start) {
     var height = start;
     async.forever(function (next) {
         //console.log('formTxHashQueue:'+height);
-        if (txHashes.length > TX_HASH_QUEUE_LIMIT || processing > BLOCK_IN_PARALEL - completeBlocks.length / STORE_QUEUE_THREAD_DECREASE_STEP) {
+        if (processing > BLOCK_IN_PARALEL - completeBlocks.length / STORE_QUEUE_THREAD_DECREASE_STEP) {
             setTimeout(function () {
                 next();
             }, TX_HASH_QUEUE_DELAY);
@@ -106,12 +99,20 @@ function formTxHashQueue(start) {
                 console.error('Something wrong!!! Should not be here!!! Failed to get block: ' + hash);
             } else {
                 //console.log('Received block: ' + hash);
-                txHashes = txHashes.concat(block.tx.map(
-                    function (tx) {
-                        return {tx: tx, block: hash};
-                    }));
-                blocks[block.hash] = {block: block, txs: []};
-                delete blockHashes['h' + requestHeight];
+                bitcore.getAllTxsByHash(hash, function (txs) {
+                    block.tx = txs;
+                    if (!config.test.noStore) {
+                        completeBlocks.push(block);
+                    } else {
+                        inserted++;
+                        insertedTx += block.tx.length;
+                        fs.addRecord({time:new Date().getTime() - mainStart.getTime(), block: inserted, txs:insertedTx});
+                        //console.log('Inserted: ' + inserted + ' takes:'+() + ' millis');
+                    }
+                    //console.log('Block downloaded:' + txHash.block);
+
+                    delete blockHashes['h' + requestHeight];
+                });
             }
             processing--;
         });
@@ -122,59 +123,6 @@ function formTxHashQueue(start) {
 
     }, function (err) {
         console.error('Form Tx Hash Queue failed' + err);
-    });
-}
-
-
-function processTxHashQueue() {
-    var processing = 0;
-    async.forever(function (next) {
-        //console.log('processTxHashQueue');
-        if (processing > TX_IN_PARALEL - completeBlocks.length / STORE_QUEUE_THREAD_DECREASE_STEP) {
-            setTimeout(function () {
-                next();
-            }, TX_PROCESSING_QUEUE_DELAY);
-            return;
-        }
-
-        const txHash = txHashes.shift();
-        if (!txHash) {
-            setTimeout(function () {
-                next();
-            }, WAIT_NEXT_TX_HASH_DELAY);
-            return;
-        }
-        if (txHash.tx === ABSENT_TX) {
-            next();
-            return;
-        }
-        processing++;
-        bitcore.getTxById(txHash.tx, function (tx) {
-            if (!tx) {
-                console.error('Something wrong!!! Should not be here!!! Failed to get tx: ' + hash);
-            } else {
-                //console.log('Received tx: ' + txHash.tx);
-
-                const block = blocks[txHash.block];
-                block.txs.push(tx);
-                if (block.block.tx.length === block.txs.length) {
-                    if (!config.test.noStore) {
-                        completeBlocks.push(block);
-                    } else {
-                        inserted++;
-                        insertedTx += block.block.tx.length;
-                        fs.addRecord({time:new Date().getTime() - mainStart.getTime(), block: inserted, txs:insertedTx});
-                        //console.log('Inserted: ' + inserted + ' takes:'+() + ' millis');
-                    }
-                    //console.log('Block downloaded:' + txHash.block);
-                    delete blocks[txHash.block];
-                }
-            }
-            processing--;
-        });
-        next();
-    }, function (err) {
-        console.error('Process Tx Hash Queue failed' + err);
     });
 }
 

@@ -28,6 +28,16 @@ function getTxById(id, callback) {
     }, callback);
 }
 
+function getAllTxsByHash(hash, callback) {
+    getDataUntilSuccess('/insight-api/txs?block=' + hash, function(data) {
+        data = data.txs.map(function (tx) {
+            delete tx.confirmations;
+            return tx;
+        });
+        return data;
+    }, callback);
+}
+
 function getDataUntilSuccess(path, projector, doneCallback) {
     var completed = false;
 
@@ -113,3 +123,4 @@ module.exports.getBlockHashByHeight = getBlockHashByHeight;
 module.exports.getBlockByHash = getBlockByHash;
 module.exports.getBlockByHeight = getBlockByHeight;
 module.exports.getTxById = getTxById;
+module.exports.getAllTxsByHash = getAllTxsByHash;
