@@ -224,6 +224,94 @@ function getTxForIndex(txid, callback) {
     });
 }
 
+
+function insertBlockNoCheck(block, callback) {
+    const start = new Date();
+    ipfs.insertBlock(block, function (hash) {
+        console.log("index: " + block.hash + " -> " + hash.message + ' takes:'+(new Date().getTime() - start.getTime()) + ' millis');
+        callback(true);
+    });
+}
+
+function insertTxNoCheck(tx, callback) {
+    const start = new Date();
+    ipfs.insertTx(tx, function (hash) {
+        console.log("indexTx: " + tx.txid + " -> " + hash.message + 'takes:'+(new Date().getTime() - start.getTime()) + ' millis');
+        callback(true);
+    });
+}
+
+function insertBlock(block, callback) {
+    const start = new Date();
+    async.waterfall([
+        function (next) {
+            ipfs.getBlockByHash(block.hash, function (stored) {
+                next(null, block, stored);
+            });
+        },
+        function (block, stored, next) {
+            if (!stored) {
+                next(null, block);
+            } else{
+                next({exist: true});
+            }
+        },
+        function (block, next) {
+            ipfs.insertBlock(block, function (hash) {
+                next(null, block, hash);
+            });
+        }
+    ], function (err, block, hash) {
+        if (err) {
+            if (!err.exist) {
+                console.error("index: " + err);
+            }
+            callback(err.exist);
+            return;
+        }
+        //FIXME need height to log
+        console.log("index: " + block.hash + " -> " + hash.message + 'takes:'+(new Date().getTime() - start.getTime()) + ' millis');
+        callback(true);
+    });
+}
+
+function insertTx(tx, callback) {
+    const start = new Date();
+    async.waterfall([
+        function (next) {
+            ipfs.getTxByTxid(tx.txid, function (stored) {
+                next(null, tx, stored);
+            });
+        },
+        function (tx, stored, next) {
+            if (!stored) {
+                next(null, tx);
+            } else{
+                next({exist: true});
+            }
+        },
+        function (tx, next) {
+            ipfs.insertTx(tx, function (hash) {
+                next(null, tx, hash);
+            });
+        }
+    ], function (err, tx, hash) {
+        if (err) {
+            if (!err.exist) {
+                console.error("index: " + err);
+            }
+            callback(err.exist);
+            return;
+        }
+        console.log("indexTx: " + tx.txid + " -> " + hash.message + 'takes:'+(new Date().getTime() - start.getTime()) + ' millis');
+        callback(true);
+    });
+}
+
 module.exports.index = index;
 module.exports.indexData  = indexData;
 module.exports.getDataForIndex = getDataForIndex;
+module.exports.insertBlock = insertBlock;
+module.exports.insertTx = insertTx;
+module.exports.insertBlockNoCheck = insertBlockNoCheck;
+module.exports.insertTxNoCheck = insertTxNoCheck;
