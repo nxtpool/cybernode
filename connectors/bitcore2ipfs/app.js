@@ -3,16 +3,26 @@ var indexer = require('./app/indexer');
 var bitcore = require('./app/bitcore.service');
 var ipfs = require('./app/ipfs.service.js');
 var async = require('async');
+var config = require('./config.json');
+var fs = require('./app/fs.service');
 
 var mainStart =  new Date();
 var inserted = 0;
+var insertedTx = 0;
 
 ipfs.getHeight(function (data) {
     if (data instanceof Error) {
         console.error(data);
         return;
     }
-    var start = data ? Math.max(constants.SOURCE_START_HEIGHT, parseInt(data.message)) : constants.SOURCE_START_HEIGHT;
+
+    var start = constants.SOURCE_START_HEIGH;
+    if (config.test.startBlock > 0) {
+        start = config.test.startBlock
+    } else if (data) {
+        start = Math.max(constants.SOURCE_START_HEIGHT, parseInt(data.message))
+    }
+
     async.parallel([
             function () {
                 formBlockHashQueue(start);
@@ -101,11 +111,6 @@ function formTxHashQueue(start) {
                         return {tx: tx, block: hash};
                     }));
                 blocks[block.hash] = {block: block, txs: []};
-                /*
-                 insertBlock(block, function() {
-                 console.log('Processed block: ' + hash);
-                 });
-                 */
                 delete blockHashes['h' + requestHeight];
             }
             processing--;
@@ -153,15 +158,17 @@ function processTxHashQueue() {
                 const block = blocks[txHash.block];
                 block.txs.push(tx);
                 if (block.block.tx.length === block.txs.length) {
-                    completeBlocks.push(block);
-                    console.log('Block downloaded:' + txHash.block);
+                    if (!config.test.noStore) {
+                        completeBlocks.push(block);
+                    } else {
+                        inserted++;
+                        insertedTx += block.block.tx.length;
+                        fs.addRecord({time:new Date().getTime() - mainStart.getTime(), block: inserted, txs:insertedTx});
+                        //console.log('Inserted: ' + inserted + ' takes:'+() + ' millis');
+                    }
+                    //console.log('Block downloaded:' + txHash.block);
                     delete blocks[txHash.block];
                 }
-                /*
-                 insertTx(tx, function () {
-                 console.log('Processed tx: ' + hash);
-                 });
-                 */
             }
             processing--;
         });
@@ -172,6 +179,9 @@ function processTxHashQueue() {
 }
 
 function insertData() {
+    if (config.test.noStore) {
+        return;
+    }
     async.forever(function (next) {
         const block = completeBlocks.shift();
         if (!block) {
@@ -183,16 +193,18 @@ function insertData() {
         console.log('insert queue:' + completeBlocks.length);
         async.eachSeries(block.txs,
             function(tx, nextTx) {
-                insertTxNoCheck(tx, function () {
+                indexer.insertTxNoCheck(tx, function () {
                     //console.log('Processed tx: ' + tx.txid);
                     nextTx();
                 });
             },
             function (err) {
-                insertBlockNoCheck(block.block, function() {
+                indexer.insertBlockNoCheck(block.block, function() {
                     //console.log('Processed block: ' + block.block.hash);
                     inserted++;
-                    console.log('Inserted: ' + inserted + ' takes:'+(new Date().getTime() - mainStart.getTime()) + ' millis');
+                    insertedTx += block.block.tx.length;
+                    fs.addRecord({time:new Date().getTime() - mainStart.getTime(), block: inserted, txs:insertedTx});
+                    //console.log('Inserted: ' + inserted + ' takes:'+(new Date().getTime() - mainStart.getTime()) + ' millis');
                     next();
                 });
             }
@@ -202,85 +214,3 @@ function insertData() {
     });
 }
 
-function insertBlockNoCheck(block, callback) {
-    const start = new Date();
-    ipfs.insertBlock(block, function (hash) {
-        console.log("index: " + block.hash + " -> " + hash.message + ' takes:'+(new Date().getTime() - start.getTime()) + ' millis');
-        callback(true);
-    });
-}
-
-function insertTxNoCheck(tx, callback) {
-    const start = new Date();
-    ipfs.insertTx(tx, function (hash) {
-        console.log("indexTx: " + tx.txid + " -> " + hash.message + 'takes:'+(new Date().getTime() - start.getTime()) + ' millis');
-        callback(true);
-    });
-}
-
-function insertBlock(block, callback) {
-    const start = new Date();
-    async.waterfall([
-        function (next) {
-            ipfs.getBlockByHash(block.hash, function (stored) {
-                next(null, block, stored);
-            });
-        },
-        function (block, stored, next) {
-            if (!stored) {
-                next(null, block);
-            } else{
-                next({exist: true});
-            }
-        },
-        function (block, next) {
-            ipfs.insertBlock(block, function (hash) {
-                next(null, block, hash);
-            });
-        }
-    ], function (err, block, hash) {
-        if (err) {
-            if (!err.exist) {
-                console.error("index: " + err);
-            }
-            callback(err.exist);
-            return;
-        }
-        //FIXME need height to log
-        console.log("index: " + block.hash + " -> " + hash.message + 'takes:'+(new Date().getTime() - start.getTime()) + ' millis');
-        callback(true);
-    });
-}
-
-function insertTx(tx, callback) {
-    const start = new Date();
-    async.waterfall([
-        function (next) {
-            ipfs.getTxByTxid(tx.txid, function (stored) {
-                next(null, tx, stored);
-            });
-        },
-        function (tx, stored, next) {
-            if (!stored) {
-                next(null, tx);
-            } else{
-                next({exist: true});
-            }
-        },
-        function (tx, next) {
-            ipfs.insertTx(tx, function (hash) {
-                next(null, tx, hash);
-            });
-        }
-    ], function (err, tx, hash) {
-        if (err) {
-            if (!err.exist) {
-                console.error("index: " + err);
-            }
-            callback(err.exist);
-            return;
-        }
-        console.log("indexTx: " + tx.txid + " -> " + hash.message + 'takes:'+(new Date().getTime() - start.getTime()) + ' millis');
-        callback(true);
-    });
-}

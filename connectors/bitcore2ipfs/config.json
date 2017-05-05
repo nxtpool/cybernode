@@ -6,6 +6,10 @@
   "ipfsStore" : {
     "host": "localhost",
     "port": 8000
+  },
+  "test" : {
+    "startBlock": 300000,
+    "noStore": true
   }
 }
 
