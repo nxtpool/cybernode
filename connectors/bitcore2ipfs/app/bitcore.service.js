@@ -78,7 +78,12 @@ function getData(path, projector, doneCallback) {
                 console.warn("Not found. Path: " + path);
                 return;
             }
-            doneCallback(null, projector(JSON.parse(str)));
+            try {
+                doneCallback(null, projector(JSON.parse(str)));
+            } catch (err) {
+                log.error(str);
+                getData(path, projector, doneCallback);
+            }
         });
 
     });

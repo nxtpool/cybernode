@@ -139,22 +139,14 @@ function insertData() {
             return;
         }
         console.log('insert queue:' + completeBlocks.length);
-        async.eachSeries(block.txs,
-            function(tx, nextTx) {
-                indexer.insertTxNoCheck(tx, function () {
-                    //console.log('Processed tx: ' + tx.txid);
-                    nextTx();
-                });
-            },
-            function (err) {
-                indexer.insertBlockNoCheck(block.block, function() {
-                    //console.log('Processed block: ' + block.block.hash);
-                    inserted++;
-                    insertedTx += block.block.tx.length;
-                    fs.addRecord({time:new Date().getTime() - mainStart.getTime(), block: inserted, txs:insertedTx});
-                    //console.log('Inserted: ' + inserted + ' takes:'+(new Date().getTime() - mainStart.getTime()) + ' millis');
-                    next();
-                });
+
+        indexer.insertBlockNoCheck(block, function() {
+            //console.log('Processed block: ' + block.block.hash);
+            inserted++;
+            insertedTx += block.tx.length;
+            fs.addRecord({time:new Date().getTime() - mainStart.getTime(), block: inserted, txs:insertedTx});
+            //console.log('Inserted: ' + inserted + ' takes:'+(new Date().getTime() - mainStart.getTime()) + ' millis');
+            next();
             }
         )
     }, function (err) {
