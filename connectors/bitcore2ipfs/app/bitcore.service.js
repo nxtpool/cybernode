@@ -29,7 +29,7 @@ function getTxById(id, callback) {
 }
 
 function getAllTxsByHash(hash, callback) {
-    getDataUntilSuccess('/insight-api/txs?block=' + hash, function(data) {
+    getDataUntilSuccess('/insight-api/txs-full/?block=' + hash, function(data) {
         data = data.txs.map(function (tx) {
             delete tx.confirmations;
             return tx;
