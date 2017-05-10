@@ -29,7 +29,7 @@ function getTxById(id, callback) {
 }
 
 function getAllTxsByHash(hash, callback) {
-    getDataUntilSuccess('/insight-api/txs?block=' + hash, function(data) {
+    getDataUntilSuccess('/insight-api/txs-full/?block=' + hash, function(data) {
         data = data.txs.map(function (tx) {
             delete tx.confirmations;
             return tx;
@@ -78,7 +78,12 @@ function getData(path, projector, doneCallback) {
                 console.warn("Not found. Path: " + path);
                 return;
             }
-            doneCallback(null, projector(JSON.parse(str)));
+            try {
+                doneCallback(null, projector(JSON.parse(str)));
+            } catch (err) {
+                log.error(str);
+                getData(path, projector, doneCallback);
+            }
         });
 
     });
